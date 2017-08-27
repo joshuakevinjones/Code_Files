@@ -1,0 +1,22 @@
+-- Bringing in the new fields to the OC_CHECKS_DATES_REASONS_20131026
+
+SELECT a.*
+	  ,b.[Dept Descr]
+	  ,c.[Translate Long Name]
+	  ,d.[Descr] AS [Company Descr]
+	  ,e.[Descr] AS [Paygroup Descr]
+INTO [IAACE1].[TRNPAY].[OC_CHECKS_DATES_REASONS_20131026_v2]
+ 
+ FROM [IAACE1].[TRNPAY].[OC_CHECKS_DATES_REASONS_20131026] a
+  LEFT JOIN
+	[IAACE1].[TRNPAY].[LK_DEPT_TBL] b
+	ON a.[Dept ID] = b.[Dept ID]
+  LEFT JOIN 
+	[IAACE1].[TRNPAY].[LK_EMPL_TYPE_TBL] c
+	ON a.[Empl Type] = c.[Field Value]
+  LEFT JOIN
+	[IAACE1].[TRNPAY].[LK_COMPANY_TBL] d
+	ON a.[Company Code] = d.[Co]
+  LEFT JOIN
+	[IAACE1].[TRNPAY].[LK_PAYGROUP_TBL] e
+	ON a.[Pay Group] = e.[Group];

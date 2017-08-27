@@ -1,0 +1,15 @@
+-- Add the column
+
+USE IAACE1;
+GO
+
+	ALTER TABLE
+	[JKJ_Address] ADD Timing2 VARCHAR(20) NULL;
+
+-- Update the column with a value
+
+USE IAACE1;
+GO
+	UPDATE 
+	[dbo].[JKJ_Address]
+	SET [Timing] = 'C';

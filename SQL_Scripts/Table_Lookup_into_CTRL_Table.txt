@@ -1,0 +1,13 @@
+-- VLOOKUP-like
+	-- does lookup into CTRL table to add a Descr where there is currently only a code (add long description)
+
+SELECT
+	a.*, b.[Descr] AS 'BU Descr'
+
+FROM
+	[IAACE1].[TRNPAY].[OC_CHECKS_DATES_REASONS_20131026] a
+	
+LEFT OUTER JOIN
+	[IAACE1].[TRNPAY].[LK_BUS_UNIT] b
+
+ON a.[Unit] = b.[Unit]

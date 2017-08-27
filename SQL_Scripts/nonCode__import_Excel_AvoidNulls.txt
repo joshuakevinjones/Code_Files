@@ -1,0 +1,1 @@
+SELECT * FROM [SheetName$] query instead of direct table/sheet name in the import wizard.

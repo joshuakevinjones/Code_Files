@@ -1,0 +1,20 @@
+USE [IAACE1]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE VIEW [TRN_PS].[v_JRNL_HDR_LN_WORDS] AS
+SELECT
+	t.*, w.word_flag, w.words	
+FROM
+	[IAACE1].[TRN_PS].[v_JRNL_HDR_LN] t
+	INNER JOIN
+		[IAACE1].[TRN_PS].[A_KEYWORDS_TBL] w
+	ON
+		t.[Jrnl Descr (Short)] LIKE '%'+w.words+'%'
+		
+GO
