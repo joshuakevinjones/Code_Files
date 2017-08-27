@@ -1,10 +1,10 @@
------Creating table SEC_INTERNAL_AUDIT
+--Creating table SEC_INTERNAL_AUDIT
 
 --creating table with selected results from another table
 --could use to filter, etc.
 
 SELECT DISTINCT 
-	[Empl ID]
+	 [Empl ID]
 	,[Dept Descr]
 
 INTO 
@@ -14,4 +14,4 @@ FROM
 [IAACE1].[TRNPAY].[BASE_JOB_INFO_DETAIL]
 
 WHERE 
-[Dept Descr] = 'Internal Audit';
+[Dept Descr] = 'Internal Audit'
