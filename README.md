@@ -28,7 +28,7 @@ Syntax highlighted code block
 
 For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
 
-[Code Files](https://github.com/joshuakevinjones/Code_Files)
+## [Code Files](https://github.com/joshuakevinjones/Code_Files)
 
 ### Jekyll Themes
 
