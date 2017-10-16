@@ -5,7 +5,8 @@ This website collects misc. code files I've come across over the years.  I maint
 This page runs on [Jekyll](https://jekyllrb.com/) and is dynamically rebuilt when files in the underlying repositories change.
 
 ## [Code Files](https://github.com/joshuakevinjones/Code_Files)
-# [Python Code](https://github.com/joshuakevinjones/Code_Files/tree/master/Python_Scripts)
+### [Python Code](https://github.com/joshuakevinjones/Code_Files/tree/master/Python_Scripts)
+### [TSQL Scripts](https://github.com/joshuakevinjones/Code_Files/tree/master/SQL_Scripts)
 
 ### Markdown
 
