@@ -1,5 +1,5 @@
 
-```markdown
+```python
 # Load a list called numbers
 number = raw_input('Enter number:')
 numbers = []
