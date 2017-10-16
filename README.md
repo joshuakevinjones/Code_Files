@@ -1,8 +1,10 @@
-## Welcome to GitHub Pages
+## Welcome to my GitHub page.
 
-You can use the [editor on GitHub](https://github.com/joshuakevinjones/Code_Files/edit/master/README.md) to maintain and preview the content for your website in Markdown files.
+This website collects misc. code files I've come across over the years.  I maintain and preview the content for the website in Markdown files.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+This page runs on [Jekyll](https://jekyllrb.com/) and is dynamically rebuilt when files in the underlying repositories change.
+
+## [Code Files](https://github.com/joshuakevinjones/Code_Files)
 
 ### Markdown
 
@@ -27,13 +29,3 @@ Syntax highlighted code block
 ```
 
 For more details see [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-## [Code Files](https://github.com/joshuakevinjones/Code_Files)
-
-### Jekyll Themes
-
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/joshuakevinjones/Code_Files/settings). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
-
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://help.github.com/categories/github-pages-basics/) or [contact support](https://github.com/contact) and we’ll help you sort it out.
