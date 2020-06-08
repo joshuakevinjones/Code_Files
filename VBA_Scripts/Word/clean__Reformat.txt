@@ -1,0 +1,44 @@
+Sub ReFormat()
+    Dim hyp As Hyperlink
+    With ActiveDocument
+        With .Range
+         'set font for document body
+            With .Font
+                .Name = "Arial"
+                .Size = 9
+                .Color = wdColorAutomatic 'default colout, usually black
+            End With
+        End With
+        
+        'set colour for hyperlinks
+        For Each hyp In .Hyperlinks
+            hyp.Range.Font.Color = wdColorBlue
+        Next hyp
+        
+        'set font for particular text
+        With .Range.Find
+            .Text = "+1 (212) 555-1212 phone"
+            With .Replacement.Font
+                .Bold = True
+                .Name = "Arial"
+                .Size = 9
+            End With
+            .Execute Replace:=wdReplaceAll
+        End With
+        
+        'set font for a different piece of text
+         With .Range.Find
+            .Text = "insert signature line here of department"
+            With .Replacement.Font
+                .Bold = True
+                .Name = "Arial"
+                .Color = wdColorGray25
+            End With
+            .Execute Replace:=wdReplaceAll
+        End With
+        
+        'add footer text
+        .Range.Sections(1).Footers(wdHeaderFooterPrimary).Range.Text = _
+               vbCr & "today’s date – sent by John Doe"
+    End With
+End Sub

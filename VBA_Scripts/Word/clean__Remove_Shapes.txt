@@ -1,0 +1,38 @@
+Sub DeleteAllShapes()
+Dim shp As Word.Shape
+For Each shp In ActiveDocument.Shapes
+    shp.Delete
+Next
+End Sub
+
+Sub DitchPictures()
+Dim objPic As InlineShape
+For Each objPic In ActiveDocument.InlineShapes
+objPic.Delete
+Next objPic
+
+
+Do While ActiveDocument.Shapes.Count > 0
+ActiveDocument.Shapes(1).Delete
+Loop
+
+Do While ActiveDocument.InlineShapes.Count > 0
+ActiveDocument.InlineShapes(1).Delete
+Loop
+
+End Sub
+
+
+
+Sub Demo()
+    Dim oShp As Shape
+    Dim oIShp As InlineShape
+
+    For Each oShp In ActiveDocument.Shapes
+        oShp.Delete
+    Next
+
+    For Each oIShp In ActiveDocument.InlineShapes
+        oIShp.Delete
+    Next
+End Sub

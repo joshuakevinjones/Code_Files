@@ -1,0 +1,15 @@
+Sub DeleteAllHeadersFooters()
+
+  Dim sec As Section
+  Dim hd_ft As HeaderFooter
+
+  For Each sec In ActiveDocument.Sections
+    For Each hd_ft In sec.Headers
+      hd_ft.Range.Delete
+    Next
+    For Each hd_ft In sec.Footers
+      hd_ft.Range.Delete
+    Next
+  Next sec
+
+End Sub

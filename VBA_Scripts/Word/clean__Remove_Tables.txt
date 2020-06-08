@@ -1,0 +1,6 @@
+Sub DeleteTables_ActiveDocument()
+Dim tbl As Table
+For Each tbl In ActiveDocument.Tables
+tbl.Delete
+Next tbl
+End Sub

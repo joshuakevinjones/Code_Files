@@ -1,0 +1,13 @@
+Sub Demo()
+    With ActiveDocument.Content.Find
+        .ClearFormatting
+        .Replacement.ClearFormatting
+        .Text = "^12[^12^13 ]{1,}"
+        .Replacement.Text = "^12"
+        .Forward = True
+        .Wrap = wdFindContinue
+        .Format = False
+        .MatchWildcards = True
+        .Execute Replace:=wdReplaceAll
+    End With
+End Sub
