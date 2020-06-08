@@ -6,7 +6,7 @@ This page runs on [Jekyll](https://jekyllrb.com/) and is dynamically rebuilt whe
 
 ## [Code Files](https://github.com/joshuakevinjones/Code_Files)
 ### [Python Code](https://github.com/joshuakevinjones/Code_Files/tree/master/Python_Scripts)
-### [TSQL Scripts](https://github.com/joshuakevinjones/Code_Files/tree/master/SQL_Scripts)
+### [SQL Scripts](https://github.com/joshuakevinjones/Code_Files/tree/master/SQL_Scripts)
 
 ### Markdown
 
