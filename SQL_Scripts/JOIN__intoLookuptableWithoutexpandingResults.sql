@@ -4,7 +4,8 @@ LEFT JOIN into a lookup table with duplicate key values and take the first value
 Business purpose is to prevent data expansion when joining into a field with multiple lookup values.
 */
 
-/* Example 1 : CF1_NS_VW (called a) is the lookup table */
+
+/* Example 1 : CF1_NS_VW (called a) is the lookup table*/
 
 LEFT JOIN 
 	(
@@ -22,10 +23,8 @@ LEFT JOIN
 	(
 	SELECT [ProjectCF2], [CF2Descr]
 	FROM
-			(
-				SELECT [ProjectCF2], [CF2Descr], ROW_NUMBER() OVER(PARTITION BY [ProjectCF2] ORDER BY [CF2Descr]) rnk -- establishes rnk
-				FROM [IAACE1].[TRN_PS].[CF2_NS_VW]
-			) a --establishes a
-	WHERE rnk = 1
-	) l -- establishes l (the lookup table)
+		(
+		SELECT [ProjectCF2], [CF2Descr], ROW_NUMBER() OVER(PARTITION BY [ProjectCF2] ORDER BY [CF2Descr]) rnk -- establishes rnk
+		FROM [IAACE1].[TRN_PS].[CF2_NS_VW]) a --establishes a
+		WHERE rnk = 1) l -- establishes l (the lookup table)
 ON a.CHARTFIELD2 = l.ProjectCF2

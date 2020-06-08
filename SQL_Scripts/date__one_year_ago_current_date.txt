@@ -1,0 +1,25 @@
+-- ============================================================
+-- Author| Josh Jones / Project| Aspirent Home Depot Misc.
+-- Create Date| 2018/09/12			
+-- Description: One year ago from current date			
+/*
+	Ways to create a new table by copying an existing table	
+	or copying the results of a subset on an existing table
+*/
+-- ============================================================
+
+
+/* *************************************************************
+<category__file_name>
+
+--<source>	:
+--<date>	: 
+--<descr>	: 
+
+****************************************************************
+change history
+
+
+************************************************************* */
+
+SELECT DATEADD(yy, -1, CAST(CONVERT(VARCHAR(10), GETDATE(), 110) AS DATE))

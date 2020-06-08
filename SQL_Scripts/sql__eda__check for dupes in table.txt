@@ -1,0 +1,7 @@
+SELECT *
+	FROM (
+		SELECT t.*
+		,SUM(1) OVER (PARTITION BY col1, col2 ...) AS n
+		FROM table_with_dupes t
+	)
+	WHERE n > 1
