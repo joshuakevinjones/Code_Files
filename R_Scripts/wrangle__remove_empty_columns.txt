@@ -1,3 +1,0 @@
-
-
-df. <- df[,colSums(is.na(df))<nrow(df)] # remove columns in which all values are blank

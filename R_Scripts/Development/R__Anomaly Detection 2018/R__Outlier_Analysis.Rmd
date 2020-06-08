@@ -1,0 +1,439 @@
+---
+title: "Tests for Outliers"
+output: html_notebook
+---
+
+## Outlier Treatment
+
+Outliers in data can distort predictions and affect the accuracy, if you don't detect and handle them appropriately especially in regression models.
+
+### Why Outlier Detection is Important
+
+Treating or altering the outlier/extreme values in genuine observations is not a standard operating procedure. However, it is essential to understand their impact on your predictive models. It is left to the best judgement of the investigator to decide whether treating outliers is necessary and how to go about it.
+
+So, why identifying the extreme values is important? Because, it can drastically bias/change the fit estimates and predictions. Let me illustrate this using the cars dataset.
+
+To better understand the implications of outliers better, I am going to compare the fit of a simple linear regression model on cars dataset with and without outliers. In order to distinguish the effect clearly, I manually introduce extreme values to the original cars dataset. Then, I predict on both the datasets.
+
+```{r}
+
+# consider cars data
+head(cars)
+str(cars)
+
+# inject outliers
+cars1 <- cars[1:50, ]  # original data
+
+cars_outliers <- data.frame(speed=c(19,19,20,20,20), dist=c(190, 186, 210, 220, 218))  # introduce outliers.
+
+cars2 <- rbind(cars1, cars_outliers)  # data with outliers.
+```
+
+```{r}
+
+# plot data with outliers
+
+par(mfrow=c(1, 2))
+plot(cars2$speed, cars2$dist, xlim=c(0, 28), ylim=c(0, 230), main="With Outliers", xlab="speed", ylab="dist", pch="*", col="red", cex=2)
+abline(lm(dist ~ speed, data=cars2), col="blue", lwd=3, lty=2)
+
+# Plot of original data without outliers. Note the change in slope (angle) of best fit line.
+plot(cars1$speed, cars1$dist, xlim=c(0, 28), ylim=c(0, 230), main="Outliers removed \n A much better fit!", xlab="speed", ylab="dist", pch="*", col="red", cex=2)
+abline(lm(dist ~ speed, data=cars1), col="blue", lwd=3, lty=2)
+
+```
+
+Notice the change in slope of the best fit line after removing the outliers. Had we used the outliers to train the model(left chart), our predictions would be exagerated (high error) for larger values of speed because of the larger slope.
+
+## Begin R Outlier Analysis Script
+
+```{r Load Libraries, include = FALSE}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+#install.packages("outliers")
+library(outliers)
+#install.packages("OutliersO3")
+library(OutliersO3)
+#install.packages("gridExtra")
+library(gridExtra)
+#install.packages("DMwR")
+library(DMwR)  # package for LOF
+```
+
+### Read in and Process Data
+
+```{r Read Data and Scale, include = FALSE}
+
+# File selection for loading local files
+# df <- as.data.frame(read.csv(file.choose(), sep = ','))
+
+# sample data sets
+#data(iris)
+data(mtcars)
+#data(diamonds)
+
+df <- data.frame(mtcars)  # assign the sample dataset to a df
+
+numeric_columns <- sapply(df, is.numeric)  # id the columns to scale (the numeric columns)
+
+# examine which columns are numeric 
+numeric_columns
+
+# recode any columns incorrectly identified as numeric
+
+df_orig <- df  # make a copy of the pre-scaling df
+numeric_columns_orig <- sapply(df_orig, is.numeric)  # id the columns to scale (the numeric columns) for the original, non-scaled dataset
+
+
+df[numeric_columns] <- df[numeric_columns] %>%  # scale the numeric columns
+  mutate_all(funs(as.numeric(scale(.))))
+
+  # alternate way
+  #df[numeric_columns] <- lapply(df[numeric_columns], scale)  # apply scaling for the numeric columns
+
+
+df_orig[numeric_columns_orig] <- df_orig[numeric_columns_orig] %>%  # process the numeric columns in the original dataset
+  mutate_all(funs(as.numeric(.)))
+
+#df <- df %>%
+#  dplyr::select(Species, everything())  # move the categorical columns to the front of the data frame
+
+#df_orig <- df_orig %>%
+#  dplyr::select(Species, everything())  # move the categorical columns to the front of the data frame
+
+```
+
+### Exploratory Analysis (Non-Scaled Data)
+
+```{r Exploratory Analysis (Non-Scaled Data)}
+
+pairs_colors <- c("red", "green3", "blue")  
+pairs(df_orig[numeric_columns], main = "Pairwise Plot (Non-Scaled)", pch = 25, lower.panel = NULL, col = "Blue") 
+  # option to color by cat variable...col = pairs_colors[df_orig$AcctDescr])
+
+boxplot(df_orig[numeric_columns], outline = FALSE, main = "Boxplot of Numeric Variables (Non-Scaled)", xlab = "Variable", ylab = "Occurrence", col = "Orange")
+  # option to color by cat variable...col = pairs_colors[df_orig$AcctDescr])
+
+# Basic histogram, plotted for all numeric values in the data frame
+ggplot(gather(df_orig[numeric_columns]), aes(value)) + 
+    geom_histogram(bins = 10, color = "black", fill = "red") + 
+    facet_wrap(~key, scales = 'free_x')
+
+```
+
+### Exploratory Analysis (Scaled Data)
+
+This section will used the same plots, packages, etc. as the non-scaled data section above.  The only difference here is that this section will use a different data frame (the scaled data).
+
+```{r Exploratory Analysis (Scaled Data)}
+pairs_colors <- c("red", "green3", "blue")  
+pairs(df[numeric_columns], main = "Pairwise Plot (Scaled)", pch = 25, lower.panel = NULL, col="Blue") 
+  # option to color by cat variable...col = pairs_colors[df_orig$AcctDescr])
+
+boxplot(df[numeric_columns], outline = FALSE, main = "Boxplot of Numeric Variables (Scaled)", xlab = "Variable", ylab = "Occurrence", col = "Orange")
+  # option to use pairs_colors[df_orig$AcctDescr] to color based on categorical variable
+
+# Basic histogram, plotted for all numeric values in the data frame
+ggplot(gather(df[numeric_columns_orig]), aes(value)) + 
+    geom_histogram(bins = 10, color = "black", fill = "red") + 
+    facet_wrap(~key, scales = 'free_x')
+
+
+```
+
+## Detect Outliers
+
+### Univariate Approach
+For a given continuous variable, outliers are those observations that lie outside 1.5 * IQR, where IQR, the 'Inter Quartile Range' is the difference between 75th and 25th quartiles. Look at the points outside the whiskers in below box plot.
+
+
+```{r}
+
+outlier_values <- boxplot.stats(df_orig$wt)$out  # outlier values.
+boxplot(df_orig$wt, main = "wt", boxwex=0.1)
+mtext(paste("Outliers: ", paste(outlier_values, collapse=", ")), cex=0.6,col="red")
+
+```
+
+###Bivariate Approach
+
+Visualize in box-plot of the X and Y, for categorical X's
+
+```{r}
+# data loaded above
+```
+
+```{r EDA}
+str(df_orig)
+
+```
+
+```{r Outliers, Bivariate, Categorical}
+# For categorical variable
+boxplot(mpg ~ qsec, data=df_orig, main="mpg ~ quarter mile time (sec)", col="red", xlab="mpg", ylab="qsec")  # clear pattern is noticeable.
+abline(lm(mpg ~ qsec, data=df_orig), col="blue", lwd=3, lty=2)
+
+boxplot(mpg ~ hp, data=df_orig, main="mpg ~ hp", xlab="hp", ylab="mpg", col="light blue")  
+abline(lm(mpg ~ hp, data=df_orig), col="blue", lwd=3, lty=2)
+```
+
+What is the inference? The change in the level of boxes suggests that the first variable seems to have an impact mpg while second variable does not. Any outliers in respective categorical level show up as dots outside the whiskers of the boxplot.
+
+```{r Outliers, Bivariate, Continuous}
+
+# For continuous variable (convert to categorical if needed.)
+boxplot(mpg ~ drat, data=df_orig, main="need to change title")
+abline(lm(mpg ~ drat, data=df_orig), col="blue", lwd=3, lty=2)
+
+boxplot(mpg ~ cut(disp, pretty(df_orig$disp)), data=df_orig, main="need to change title", cex.axis=0.5)
+abline(lm(mpg ~ disp, data=df_orig), col="blue", lwd=3, lty=2)
+
+```
+You can see few outliers in the box plot and how the ozone_reading increases with pressure_height. Thats clear.
+
+
+```{r}
+
+# z-score tests
+
+z_90 <- outliers::scores(df, type = "z", prob=.90) # beyond 90th %tile
+z_95 <- outliers::scores(df, type = "z", prob=.95) # beyond 95th %tile
+z_99 <- outliers::scores(df, type = "z", prob=.99) # beyond 99th %tile
+
+# mad tests
+
+outliers::scores(df[numeric_columns], type = "mad", prob=.90) # beyond 90th %tile
+outliers::scores(df[numeric_columns], type = "mad", prob=.95) # beyond 95th %tile
+outliers::scores(df[numeric_columns], type = "mad", prob=.99) # beyond 99th %tile
+
+
+# iqr tests
+
+outliers::scores(df[numeric_columns], type = "iqr", prob=.90) # beyond 90th %tile
+outliers::scores(df[numeric_columns], type = "iqr", prob=.95) # beyond 95th %tile
+outliers::scores(df[numeric_columns], type = "iqr", prob=.99) # beyond 99th %tile
+
+
+```
+
+```{r}
+
+create a new results table that shows all the .90 prob outliers
+this table will have all rows from the original data frame that meet the following conditions
+  has any column that meets the prob=.90 test (in any of the tests: z, mad, or iqr)
+    read this as any column that == TRUE across at least one of the .90 test result data frame (z_90, z_95, z_99)
+
+
+```
+
+```{r}
+
+this next step will create a results table similar to above but with .95 outliers
+
+```
+
+```{r}
+
+this third step will create yet another table with .99 outliers
+
+```
+
+```{r Local Outlier Factor - Multivariate Outliers}
+# Multivariate outlier analysis --- LOF
+
+# library(DMwR) loaded in first section
+
+# assign outlier scores using LOF
+outlier_scores <- lofactor(df, k = 5)
+
+# display the LOF scores
+plot(density(outlier_scores))
+
+sum(outlier_scores>=1.5)
+#sort(outlier_scores)
+
+outliers=(outlier_scores>=1.5)
+#outliers
+
+# show the observations that are outliers
+df[outliers, ]
+
+df_lof <- cbind(df, lof = outlier_scores)
+
+df_lof %>%
+  as.data.frame() %>%  # convert to df class for dplyr
+  filter(lof > 1.5) %>%  # show just the results where the local outlier factor is > the amount specified
+  arrange(desc(lof))
+
+outlier_ranking <- DMwR::outliers.ranking(df, test.data = NULL, method = "sizeDiff", method.pars = NULL, clus = list(dist = "euclidean",alg = "hclust", meth = "ward"), power = 1, verb = F)
+
+rank_report <- outlier_ranking$prob.outliers[outlier_ranking$rank.outliers]
+rank_report <- as.data.frame(rank_report)
+rank_report
+
+rm(outlier_ranking)
+
+
+```
+
+
+```{r}
+# outliers will be coloured red, all other points will be black
+colouring = rep(1,nrow(df_lof))
+colouring[outliers] = 2
+ 
+# outliers will be crosses, all other points will be circles
+symbol = rep(1,nrow(df_lof))
+symbol[outliers] = 4
+ 
+# visualising the data
+pairs(df_lof, col=colouring, pch=symbol)
+
+
+```
+
+### Multivariate Model Approach
+
+Declaring an observation as an outlier based on a just one (rather unimportant) feature could lead to unrealistic inferences.  
+
+Deciding whether an individual entity (as represented by either row or observation) is an extreme value, it better to collectively consider the features (X's) that matter.  Enter Cook's Distance.
+
+__Cooks Distance__
+Cook's distance is a measure computed with respect to a given regression model and therefore is impacted only by the X variables included in the model.  But, what does cook's distance mean?  It computes the influence exerted by each data point (row) on the predicted outcome.
+
+The cook's distance for each observation i measures the change in Y^ (fitted Y) for all observations with and without the presence of observation i, so we know how much the observation i impacted the fitted values. Mathematically, cook's distance Di for observation i is computed as:
+
+```{r}
+# setup for computing Cook's Distance
+mod <- lm(mpg ~ ., data = df)
+cooksd <- cooks.distance(mod)
+```
+
+__Influence measures__
+In general use, those observations that have a cook's distance greater than 4 times the mean may be classified as influential. This is not a hard boundary.
+
+```{r}
+plot(cooksd, pch="*", cex=2, main="Influential Observations by Cooks Distance")  # plot cook's distance
+abline(h = 4*mean(cooksd, na.rm=T), col="red")  # add cutoff line
+text(x=1:length(cooksd)+1, y=cooksd, labels=ifelse(cooksd>4*mean(cooksd, na.rm=T),names(cooksd),""), col="red")  # add labels
+```
+
+Now lets find out the influential rows from the original data.  
+
+If you extract and examine each influential row 1-by-1 (from below output), you will be able to reason out why that row turned out influential.  It is likely that one of the X variables included in the model had extreme values.
+
+
+```{r}
+
+influential <- as.numeric(names(cooksd)[(cooksd > 4*mean(cooksd, na.rm=T))])  # influential row numbers
+
+influential <- names(cooksd[(cooksd > 4*mean(cooksd, na.rm=T))])
+
+names.to.keep <- influential 
+rows.to.keep <- which(rownames(df) %in% names.to.keep) 
+
+head(df_orig[rows.to.keep, ])  # influential observations.
+
+
+
+```
+
+Lets examine the first 6 rows from above output to find out why these rows could be tagged as influential observations.
+
+Row 58, 133, 135 have very high ozone_reading.
+Rows 23, 135 and 149 have very high Inversion_base_height.
+Row 19 has very low Pressure_gradient.
+
+
+
+```{r Outliers from Clustering}
+# create a scree plot to determine the optimal number of clusters
+
+library(factoextra)
+fviz_nbclust(df, kmeans, method = "wss") + geom_vline(xintercept = 4, linetype = 2)
+
+centers <- 5  # assign the number of centers (obtained from above step)
+
+kmeans.result <- kmeans(df, centers = centers, iter.max = 10, nstart = 1)
+kmeans.result$centers  # view cluster centers
+
+kmeans.result$cluster  # view assigned cluster
+
+# calculate distances between objects and cluster centers
+centers <- kmeans.result$centers[kmeans.result$cluster, ]
+distances <- sqrt(rowSums((df - centers)^2))
+# pick top 5 largest distances
+outliers <- order(distances, decreasing=T)[1:5]
+# who are outliers
+print(outliers)
+print(df[outliers, ])
+
+# add a data frame column with that observation's cluster assignment
+df_cluster <- cbind(df, cluster = kmeans.result$cluster)
+
+fviz_cluster(kmeans.result, data = df,
+             #palette = c("#2E9FDF", "#00AFBB", "#E7B800", "#FC4E07"), 
+             ellipse.type = "euclid", # Concentration ellipse
+             star.plot = TRUE, # Add segments from centroids to items
+             repel = TRUE, # Avoid label overplotting (slow)
+             ggtheme = theme_minimal()
+)
+```
+
+
+
+
+
+### testing section
+```{r}
+
+#O3y <- O3prep(df[numeric_columns], method=c("HDo", "PCS", "BAC", "adjOut", "DDC", "MCD"), tols=0.05, boxplotLimits=6)
+O3y <- O3prep(df[numeric_columns], method=c("HDo", "PCS"), tols=0.05, boxplotLimits=6)
+O3y1 <- O3plotM(O3y)
+cx <- data.frame(outlier_method=names(O3y1$nOut), number_of_outliers=O3y1$nOut)
+knitr::kable(cx, row.names=FALSE)
+
+gridExtra::grid.arrange(O3y1$gO3, O3y1$gpcp, ncol=1)
+```
+
+## Outlier Detection within a Time Series
+
+This section presents an example of outlier detection from time series data. In the example, the time series data are first decomposed with robust regression using function stl() and then outliers are identified.
+
+```{r Time Series Outliers}
+
+data("AirPassengers")
+AP <- AirPassengers
+plot(AP, ylab="Passengers (1000s)", type="o", pch =20)
+
+# Then we can decompose the data as follows
+AP.decompM <- decompose(AP, type = "multiplicative")
+plot(AP.decompM)
+
+# use robust fitting
+f <- stl(AirPassengers, "periodic", robust=TRUE)
+(outliers <- which(f$weights<1e-8))
+
+# set layout
+op <- par(mar=c(0, 4, 0, 3), oma=c(5, 0, 4, 0), mfcol=c(4, 1))
+
+plot(f, set.pars=NULL)
+sts <- f$time.series
+# plot outliers
+points(time(sts)[outliers], 0.8*sts[,"remainder"][outliers], pch="x", col="red")
+
+par(op) # reset layout
+
+```
+
+Notes
+
+In above figure, outliers are labeled with " in red.
+
+The LOF algorithm is good at detecting local outliers, but it works on numeric data only. Package Rlof relies on the multicore package, which does not work under Windows. A fast and scalable outlier detection strategy for categorical data is the Attribute Value Frequency (AVF) algorithm.
+
+
+
+
+

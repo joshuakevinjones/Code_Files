@@ -1,0 +1,670 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    fig_height: 7
+    fig_width: 10
+    number_sections: yes
+    toc: yes
+  pdf_document:
+    toc: yes
+  word_document:
+    toc: yes
+---
+
+```{r "Setup", include = FALSE}
+
+# directory to use when running from the VM
+require("knitr")
+opts_knit$set(root.dir = "S:/ACE/Projects/ACE - Ongoing and Standard Analytics/R__Text Mining/")
+
+# optional directory - when running locally
+# opts_knit$set(root.dir = "S:/Projects/ACE - Ongoing and Standard Analytics/R__Text Mining/")
+
+```
+
+```{r "Load Packages", include=FALSE}
+
+# load the packages all in one go
+x <- c("RODBC", "data.table", "readtext", "tm", "wordcloud", "tidytext", "doParallel", "tau", "quanteda", "stringr", "ggplot2", "dplyr", "tidyverse")
+lapply(x, require, character.only = TRUE)
+
+doParallel::registerDoParallel(cores = 4)   # enables parallel processing    
+rm(x)
+```
+
+```{r include=FALSE}  
+# setup for working directory  
+  #setwd(choose.dir())  # alternate way to choose the folder
+
+#setwd("C:\\Users\\jonesjosh\\OneDrive - Time Warner\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\texts")
+#getwd()
+
+```
+
+```{r Custom functions, include=FALSE}
+
+## Setup for special functions used in the analysis
+# custom function to strip empty columns.  used in the sentiment analysis section below
+has_data <- function(x) { sum(!is.na(x)) > 0 }
+
+```
+
+```{r List and process files, include=FALSE}
+
+# set folder to read
+
+# <- "C:\\Users\\jonesjosh\\OneDrive - Time Warner\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\texts"
+#folder_to_read <- "S:/ACE/Projects/ACE - Ongoing and Standard Analytics/R__Text Mining/texts"
+folder_to_read <- "S:/ACE/Projects/ACE - Ongoing and Standard Analytics/R__Text Mining/contracts_test"
+
+# alternate folder - depends on whether running locally or from VM
+# "S:/Projects/ACE - Ongoing and Standard Analytics/R__Text Mining/contracts_test"
+
+# check
+folder_to_read
+
+# 
+file_list <- list.files(
+  #path = "C:\\Users\\jonesjosh\\OneDrive - Time Warner\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\texts",
+  folder_to_read, # JKJ ~ need to fix so that we can let user specify file path
+  pattern = ".docx", # JKJ 2018/05/09 ~ need to make sure we can read Word and PDF too
+  all.files = FALSE, 
+  full.names = FALSE, 
+  recursive = TRUE, 
+  ignore.case = FALSE, 
+  include.dirs = TRUE, 
+  no.. = FALSE)
+
+# cleanup
+#rm(folder_to_read)
+
+```
+# Analysis Overview
+
+Text analytics extract meanings, patterns, and structure hidden in unstructured textual data.  This analysis uses text analytics to examine either documents or groups of documents.  The tests in this analysis will run on either a single document or a collection of documents.  The user must interpret the test results in light of whether the analysis examined one or many documents.
+
+## Purpose and Objectives
+
+This textual analysis attempts to both increase the breadth and improve the efficiency of audit work when that work targets text documents.  Basically, the script enables the user to cover more in less time.
+
+Examples of Testing Relevance to Audit Objectives and Sample Use Cases
+
+**Example 1: Audit team has a group of documents AND audit team possesses a clear expectation regarding document content**
+
+  1a. Use the Wordcloud and n-gram features to confirm expectation of what should (or shouldn't exist in the texts)
+        *Absense of words that should be present and/or presence of words that should be absent will warrant follow-up inquiry.
+  1b. Use the Document Scanning feature to specifically search for content that should exist in the texts.
+  1c. Use the Document Similarity section to confirm the content similarity that is expected to exist among the texts
+
+**Example 2: Audit team has a group of documents BUT audit team does not known document content**
+
+  2a. Use the Wordcloud and n-gram features to develop an understanding of content across the texts.
+  2b. Use the Document Scanning feature to search for audit-sensitive content that may or may not exist in the texts under examination (but when existence is relevant to which audit procedures would then be performed).
+  2c. Use the Document Similarity section to get a sense for which texts are similar to which others (to group the different documents).  The grouping may inform how to test.
+  
+Example 3: Audit team has three documents and wants to specifically test for an audit clause in each of the contracts.
+
+  3a. Use the Document Scanning feature to provide the following information:
+        *Whether the keywords relevant to an audit clause exist in the documents examined
+        *The words that precede and succeed audit clause keywords (keywords in context)
+        *The document name and line number within that document containing the audit clause
+  
+## Files included in this analysis
+
+This section requires input from the Audit Team.  The Audit Team must specify which files to include in the analysis.
+
+```{r}
+# These are the files / documents that Internal Audit identified for testing.
+file_list
+```
+
+```{r include=FALSE}
+
+# reads in the files using the readtext package
+
+  #datalist <- lapply(file_list, function(x) readtext(x))  # datalist is a list object
+    # this was the old way, now deprecated
+
+#datalist <- readtext(paste0("S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\texts\\*.txt"))
+
+# read pdfs
+#datalist <- readtext(paste0("S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\contracts_test\\*.docx"))
+datalist <- readtext(paste0("C:\\Users\\joshu\\OneDrive - Aspirent Consulting, LLC\\Personal OneDrive Copy Down 2019-11-12\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\texts\\*.txt"))
+
+# check
+#str(datalist)  # datalist is a list of data frames
+#head(datalist)  # shows the documents as 1x2 data frames
+
+# combine all the datalist items into a single object
+#datafr = do.call("rbind", datalist) 
+  # JKJ 2018/05/30 no longer need
+
+```
+
+```{r Corpus transformations, include=FALSE}    
+
+# creates a data corpus from the text column of the datafr data frame
+  
+  #datacorpus=Corpus(VectorSource(datafr$text))
+    # old way
+
+datacorpus=Corpus(VectorSource(datalist$text))
+
+## start of transformations (all done on datacorpus object)
+jeopCorpus=NULL
+
+removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+
+jeopCorpus <- tm_map(datacorpus, PlainTextDocument)
+jeopCorpus <- tm_map(jeopCorpus, tolower)
+jeopCorpus <- tm_map(jeopCorpus,removePunctuation)
+#jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeMostPunctuation),preserve_intra_word_dashes = TRUE) 
+jeopCorpus <- tm_map(jeopCorpus, removeNumbers)
+jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeURL))
+jeopCorpus <- tm_map(jeopCorpus, removeWords, stopwords('english'))
+jeopCorpus <- tm_map(jeopCorpus, stripWhitespace)
+#jeopCorpus <- tm_map(jeopCorpus, stemDocument,language="english")
+
+removeGarbage <- function(x) gsub("????", "", x)
+jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeGarbage))
+
+removeSpecialChars <- function(x) gsub("[^a-zA-Z0-9 ]","",x)
+jeopCorpus <- tm_map(jeopCorpus, removeSpecialChars)
+
+```
+
+```{r include=FALSE}
+# make the document term matrix using this object
+doctmtrx=DocumentTermMatrix(jeopCorpus)  # JKJ 2018/05/17 ~ changed from jeopCorpus.copy
+
+# TO DO ... document what this does
+dtm <- as.matrix(doctmtrx)
+```
+
+```{r include=FALSE}
+## PREP
+
+# Term summary (done on dtm object)
+word_data_1=as.data.frame(cbind.data.frame(Words = colnames(dtm), freq=colSums(dtm)))
+#names(word_data_1)
+
+# put in descending order
+word_data_1 <- word_data_1[order(-word_data_1$freq),]
+
+# check  
+word_data_1
+
+# Optional: write to .csv  
+#write.csv(word_data_1,"Summary.csv",row.names=F)
+```
+# Analyses
+
+## Wordcloud and n-gram Analysis
+### WORDCLOUD
+### Wordcloud Analytic Objectives
+
+The Wordcloud is a weighted list --- a visual representation of both the content and the frequency of textual data.  In this case, the word displays with that word's size weighted by the frequency with which that word occurs in the texts under analysis.
+
+The analytic objectives are twofold:
+1. To present a "teaser" --- a high-level overview of which words make up the texts under analysis.
+2. To act as a "first line indicator" --- bringing to attention any words that are conspicuously present or missing.
+
+This section requires input from the Audit Team.  If, when viewing the Wordcloud, the Audit Team identifies words requiring further investigation, an auditor must follow up with ACE to have that word added to our search/investigation list.  The search list scans every document for occurrences of the word and provides the context around it.
+
+```{r echo=FALSE}
+
+#x <- read.csv(file.choose())
+
+# Wordcloud
+library(wordcloud)
+
+wordcloud(
+  words=colnames(dtm),
+  freq=colSums(dtm), 
+  max.words = 50, 
+  min.freq = 5, 
+  scale=c(5, .3), 
+  colors=brewer.pal(n=8, "Paired"), 
+  random.order=TRUE,  # spreads out the words in the plot
+  rot.per = .35  # determines the fraction of words plotted vertically
+  )
+
+```
+
+### TOP N TERMS
+
+### ngram Analytic Objectives
+
+"ngrams" refers to displaying, for a group of texts, the most frequently-observed single words, pairs of words, and groups of three words.
+
+Displaying ngrams serves two primary purposes in our textual analysis:
+1. Gives the reader an immediate high-level overview of document content
+2. Alerts the ready to either a. words that he/she expects but does not see or b. words that he/she does not expect but does see
+
+For any form of ngram, the analyses below follow a standard format:
+- Barchart of the top 20 ngrams
+- Data table showing the frequencies of all ngrams
+
+```{r echo=FALSE}
+
+# list most frequent terms (all documents)
+suppressMessages(
+top_n_terms <- word_data_1 %>%
+  select_if(has_data) # strip empty columns
+) 
+
+# set user preference for top_n
+n <- 20
+
+# new way (descending order)
+suppressMessages(
+ggplot(top_n_terms %>% top_n(n), aes(x=reorder(Words,freq), y=freq, label = freq)) + geom_bar(stat = "identity", fill="red") + xlab("Words") + ylab("Count") + ggtitle("Top 10 Terms") + coord_flip() + geom_text(nudge_y = 15)
+)
+
+suppressMessages(
+top_n_terms %>%
+  top_n(100)
+)
+
+```
+
+### BIGRAMS
+```{r include=FALSE}
+
+bigrams <- tau::textcnt(datalist$text, n = 2, method = "string")
+bigrams <- bigrams[order(bigrams, decreasing = TRUE)]
+
+# Optional: Write list of bigrams to a file
+# fwrite(as.data.frame(bigrams),row.names = T,file = "Bigrams.csv") #This is to write the Bigram Summmary into an excel file.
+
+# plot bar chart of bigrams
+library(data.table)
+d1=setDT(as.data.frame(bigrams), keep.rownames = TRUE)[]
+
+```
+
+```{r echo=FALSE}
+
+suppressMessages(top_n_bigrams <- d1 %>%
+  select_if(has_data) %>% # strip empty columns
+  separate(rn, c("word1","word2"), sep=" ") %>%
+
+  filter(!word1 %in% stop_words$word,
+    !word2 %in% stop_words$word) %>%
+  unite(rn, word1, word2, sep=" ")
+)
+
+top_n_bigrams[top_n_bigrams == " "] <- ""
+
+
+suppressMessages(  
+ggplot(top_n_bigrams %>% top_n(n), aes(x=reorder(rn, bigrams), y=bigrams, label = bigrams)) + geom_bar(stat = "identity", fill="Blue") + xlab("Words") + ylab("Count") + ggtitle("Top Bigrams") + coord_flip() + geom_text(nudge_y = 3)
+)
+
+suppressMessages(
+top_n_bigrams %>%
+  top_n(100)
+)
+
+```
+
+### TRIGRAMS
+```{r include=FALSE}
+
+  #trigrams = textcnt(datafr$text, n = 3, method = "string")
+    # old way
+
+trigrams = textcnt(datalist$text, n = 3, method = "string")
+trigrams = trigrams[order(trigrams, decreasing = TRUE)]
+
+# View trigrams
+#head(as.data.frame(trigrams), 20)
+
+# Optional: Write list of trigrams to a file
+#fwrite(as.data.frame(trigrams),row.names = T,file = "Trigrams.csv") #This is to write the Trigram Summmary into an excel file.
+
+# plot bar chart of trigrams
+d2=setDT(as.data.frame(trigrams), keep.rownames = TRUE)
+```
+
+```{r echo=FALSE}
+
+suppressMessages(top_n_trigrams <- d2 %>%
+  select_if(has_data) %>% # strip empty columns
+  separate(rn, c("word1","word2", "word3"), sep=" ") %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word,
+         !word3 %in% stop_words$word)
+  )
+
+top_n_trigrams <- top_n_trigrams %>%
+  unite(rn, word1, word2, word3, sep=" ")
+
+ggplot(top_n_trigrams %>% top_n(n), aes(x=reorder(rn,trigrams), y=trigrams, label = trigrams)) + geom_bar(stat = "identity", fill="Purple") + xlab("Words") + ylab("Count") + ggtitle("Top Trigrams") + coord_flip() + geom_text(nudge_y = 1)
+
+suppressMessages(
+top_n_trigrams %>%
+  top_n(100)
+)
+
+```
+
+## DOCUMENT SCANNING
+
+### Document Scanning Analytic Objectives
+
+"Document scanning" refers to searching all texts within our analysis group for user-specified keywords.  The document scan results in a readout that presents the keyword hit, the document containing that keyword hit, and a user-specified number of words before and after the keyword hit.
+
+Document scanning serves the following audit objectives:
+1. Allows the user to specify and search for words that "should be present" in the documents in an automated way
+2. Allows searching for words that "should not be present" in the same way described above
+3. Allows the user to scan all documents simulatenously (expediting audit work)
+4. Alerts the user to whether key audit concepts exist in the scanned documents (for example audit clauses)
+
+### Document Scanning --- User-Specified Keywords
+
+*Note: The results below repesent only a preview.  A full, Excel-based output file (with options to sort, filter, etc.) will be provided in the analytic results.
+
+```{r include=FALSE}   
+
+# use the VCorpus object loaded via tm package
+quantedaCorpus <- corpus(jeopCorpus)
+
+quantedaCorpus <- readtext(paste0("C:\\Users\\joshu\\OneDrive - Aspirent Consulting, LLC\\Personal OneDrive Copy Down 2019-11-12\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\texts\\*.txt"))
+
+quantedaCorpus <- corpus(quantedaCorpus)
+
+```
+
+### Document Scanning - Audit Clause Keywords
+
+*Note: The results below repesent only a preview.  A full, Excel-based output file (with options to sort, filter, etc.) will be provided in the analytic results.
+
+```{r echo=FALSE}
+
+# specify audit clause keywords
+audit_clause <- "audit" #c("records", "such records", "a period", "audit", "right")
+
+# search all documents for the keywords entered above
+audit_clause_results <- kwic(quantedaCorpus, audit_clause, window = 5)
+audit_clause_results_long <- kwic(quantedaCorpus, audit_clause, window = 25)
+
+print(tbl_df(data.frame(audit_clause_results[, c(1,4,5,6)])))
+
+suppressWarnings(write.csv(audit_clause_results, # x is the data frame
+	file = "S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\output\\audit_clause_keywords.csv",
+	append = FALSE,
+	quote = TRUE,
+	sep = " ",
+	eol = "\n", na = "NA", dec = ".", row.names = TRUE, col.names = TRUE, qmethod = c("escape", "double"), fileEncoding = "")
+)
+
+suppressWarnings(write.csv(audit_clause_results_long, # x is the data frame
+	file = "S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\output\\audit_clause_long_keywords.csv",
+	append = FALSE,
+	quote = TRUE,
+	sep = " ",
+	eol = "\n", na = "NA", dec = ".", row.names = TRUE, col.names = TRUE, qmethod = c("escape", "double"), fileEncoding = "")
+)
+	
+# cleanup
+rm(audit_clause_results)
+rm(audit_clause_results_long)
+
+```
+
+### Document Scanning - FCPA Clause Keywords
+
+```{r}
+# specify audit clause keywords
+fcpa_clause <- c("foreign")
+
+# search all documents for the keywords entered above
+fcpa_clause_results <- kwic(quantedaCorpus, fcpa_clause, window = 5)
+fcpa_clause_results_long <- kwic(quantedaCorpus, fcpa_clause, window = 25)
+
+print(tbl_df(data.frame(fcpa_clause_results[, c(1,4,5,6)])))
+
+suppressWarnings(write.csv(fcpa_clause_results, # x is the data frame
+	file = "S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\output\\fcpa_clause_keywords.csv",
+	append = FALSE,
+	quote = TRUE,
+	sep = " ",
+	eol = "\n", na = "NA", dec = ".", row.names = TRUE, col.names = TRUE, qmethod = c("escape", "double"), fileEncoding = "")
+)
+
+suppressWarnings(write.csv(fcpa_clause_results_long, # x is the data frame
+	file = "S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\output\\fcpa_clause_long_keywords.csv",
+	append = FALSE,
+	quote = TRUE,
+	sep = " ",
+	eol = "\n", na = "NA", dec = ".", row.names = TRUE, col.names = TRUE, qmethod = c("escape", "double"), fileEncoding = "")
+)
+	
+# cleanup
+rm(fcpa_clause_results)
+rm(fcpa_clause_results_long)
+```
+
+
+```{r echo=FALSE}
+
+# specify first keyword
+words <- c("turner")
+
+# show the words in context      
+kwic <- as.data.frame(kwic(quantedaCorpus, words, window = 5))
+kwic_results_long <- kwic(quantedaCorpus, words, window = 25)
+
+print(tbl_df(select(kwic, docname, pre:post)))
+
+# specify second keyword
+# second keywork will go here
+
+suppressWarnings(
+write.csv(kwic, # x is the data frame
+	file = "S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\output\\user_keywords.csv",
+	append = FALSE,
+	quote = TRUE,
+	sep = " ",
+	eol = "\n", na = "NA", dec = ".", row.names = TRUE, col.names = TRUE, qmethod = c("escape", "double"), fileEncoding = "")
+)
+
+suppressWarnings(
+write.csv(kwic_results_long, # x is the data frame
+	file = "S:\\ACE\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\output\\user_keywords.csv",
+	append = FALSE,
+	quote = TRUE,
+	sep = " ",
+	eol = "\n", na = "NA", dec = ".", row.names = TRUE, col.names = TRUE, qmethod = c("escape", "double"), fileEncoding = "")
+)
+
+# cleanup
+rm(kwic)
+rm(kwic_results_long)
+
+```
+
+
+## DOCUMENT SIMILARITY
+
+### Analytic Objectives
+
+"Sentiment analysis" refers to assessing each document in our testing group on its content (sentiment).  Typically, "sentiment" refers to somewhat emotional concepts such as positive/negative.  In our usage, "sentiment" is a inter-document comparison mechanism.  The idea is that two documents with similar sentiment have similar content.
+
+Sentiment analysis targets the following audit objectives:
+1. Gives the user a baseline for understanding a document's content
+2. Provides the user with a quantitative value against which to measure other documents in our testing group
+
+```{r include=FALSE}
+
+####### Using Bag of Words and calculating the overall Sentiment of all the document ####################
+#pos = read.table("S:/Projects/2018 R Text Mining/Positive.txt", sep="\n")
+
+pos <- read.table("C:\\Users\\joshu\\OneDrive - Aspirent Consulting, LLC\\Personal OneDrive Copy Down 2019-11-12\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\Positive.txt")
+
+# alternate path
+# pos <- read.table("S:\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\Positive.txt")
+
+#View(pos)
+
+#neg = read.table("S:/Projects/2018 R Text Mining/Negative.txt", sep="\n")
+
+neg <- read.table("C:\\Users\\joshu\\OneDrive - Aspirent Consulting, LLC\\Personal OneDrive Copy Down 2019-11-12\\Code_Files\\R_Scripts\\Development\\R__Text Mining Project 2018\\Negative.txt")
+
+# alternate path
+# neg <- read.table("S:\\Projects\\ACE - Ongoing and Standard Analytics\\R__Text Mining\\Negative.txt")
+
+#View(neg)
+
+pos.matches <- match(colnames(dtm),as.character(pos$V1))
+neg.matches <- match(colnames(dtm),as.character(neg$V1))
+pos.matches <- !is.na(pos.matches)
+neg.matches <- !is.na(neg.matches)
+pos.matrix <- doctmtrx[,pos.matches]
+neg.matrix <- doctmtrx[,neg.matches]
+
+sentiment.score <- rowSums(as.matrix(pos.matrix)) - rowSums(as.matrix(neg.matrix))
+sentiment.score
+New_data=NULL
+
+  #New_data=cbind.data.frame(Doc_name=datafr[,c(1)],Sentiment_BOW=sentiment.score)
+    # old way
+
+New_data=cbind.data.frame(Doc_name=datalist[,c(1)],Sentiment_BOW=sentiment.score)
+
+# check
+  head(New_data)
+
+```    
+
+```{r FCPA Scan}
+
+library(RODBC)
+
+# connect to database
+channel <- odbcDriverConnect('driver={SQL Server};server=CQW-DBS001518.stage.twi.com; database=IAACE1; uid=IAACE1User; pwd=9n5B1RIc')
+
+fcpa_source <- sqlQuery(channel, "SELECT [words], [word_flag] FROM [IAACE1].[TRN_PS].[v_FCPA_WORDS]");
+
+fcpa_results <- dplyr::inner_join(fcpa_source, top_n_terms, by = c("words" = "Words"))
+
+fcpa_results <- fcpa_results %>%
+  arrange(desc(freq), word_flag) %>%
+  unique() %>%
+  na.omit() %>%
+  print()
+
+ggplot(fcpa_results, aes(freq)) + 
+    geom_histogram(bins = 10, color = "black", fill = "red") +
+    facet_wrap(~word_flag)
+
+```
+
+
+### Sentiment Score by Document
+
+Both the line and bar plots below quantify each document's "sentiment."  A higher number refers to a more positive sentiment, while a lower number refers to a more negative sentiment.  For this analysis' purposes, the relative comparison is most important.  View the sentiment scores against the scores from other documents as a measure of similarity.  For example, two identical contracts should have identical sentiment.  Two documents that expected to be similar but with meaningfully different sentiment scores may contain content less similar than expected --- which indicates a need for further audit analysis.
+
+```{r echo=FALSE}
+# legend
+tbl_df(as.data.frame(New_data[1]))
+
+# Sentiment plot by document
+plot(x=row.names(New_data),y=New_data$Sentiment_BOW, type="b",xlab = "Document ID", ylab = "Sentiment")
+
+# Alternate sentiment plot by document (superceded by next plot)
+#ggplot(New_data, aes(x=row.names(New_data), y=Sentiment_BOW)) + geom_bar(stat="Identity", fill="Maroon")
+
+# Latest sentiment plot by document
+ggplot(New_data, aes(x=reorder(Doc_name,Sentiment_BOW), y=Sentiment_BOW)) + geom_bar(stat = "identity", fill="orange") + xlab("File name") + ylab("Sentiment Score") + 
+  ggtitle("BOW Sentiment Score") + coord_flip()
+
+```
+
+```{r include=FALSE}    
+
+## Using Syuzhet methodology ##
+
+#install.packages('syuzhet')
+library(syuzhet)
+
+#install.packages('RNewsflow')
+#install.packages('reshape2')
+#install.packages('corrgram')
+library(RNewsflow)
+library(reshape2)
+library(corrgram)
+
+  #syuzhet_vector=get_sentiment(datafr$text,method="syuzhet")
+    # old way
+
+syuzhet_vector=get_sentiment(datalist$text,method="syuzhet")
+New_data=cbind(New_data, Sentiment_syuzhnet=syuzhet_vector)
+
+# check
+#View(New_data)
+
+  #s_v <- get_sentences(datafr$text)
+s_v <- get_sentences(datalist$text)
+
+s_v_sentiment <- get_sentiment(s_v)
+
+  #nrc_data <- get_nrc_sentiment(datafr$text)
+nrc_data <- get_nrc_sentiment(datalist$text)
+#View(nrc_data)
+
+New_data=cbind.data.frame(New_data,nrc_data)
+#glimpse(New_data)
+#write.csv(New_data,file = "Sentiment_Analysis_Combined.csv")
+
+# ADVANCED REQUIREMENT 3: Similarity among Documents
+
+# we will visualize with a heatmap
+
+```
+
+### View Sentiment Results Table
+
+```{r echo=FALSE}
+dc <- as.data.frame(New_data)
+  # old way
+dc
+
+```
+
+### View Document Comparison Correlogram (Full Text Comparison on Lexical Similarity)
+```{r echo=FALSE}
+
+doc_comp <- as.data.frame(RNewsflow::documents.compare(doctmtrx ))
+
+# legend
+tbl_df(as.data.frame(New_data[1]))
+
+doc_comp <- doc_comp %>%
+  arrange(desc(similarity))
+
+doc_comp
+
+new_doc_comp <-  reshape2::acast(doc_comp, x  ~ y, value.var = "similarity")
+new_doc_comp.sorted = new_doc_comp[as.character(order(rownames(new_doc_comp))),as.character(order(rownames(new_doc_comp)))]
+
+rm(new_doc_comp)
+
+new_doc_comp.sorted <- as.data.frame(new_doc_comp.sorted)
+
+# corrgram
+corrgram(new_doc_comp.sorted,
+         #order=TRUE,
+         main="Document Similarity Matrix",
+         lower.panel=panel.shade,
+         upper.panel=panel.pie,
+         diag.panel = panel.pts,
+         text.panel=panel.txt)
+
+#corrgram(new_doc_comp.sorted,
+         #lower.panel=panel.pts, upper.panel=panel.conf,
+         #diag.panel=panel.density)
+
+```   

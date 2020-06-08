@@ -1,0 +1,178 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r Install Packages, include=FALSE}
+
+#install.packages("ggmap")
+
+
+# install latest version of ggmap (this enables Google API key)
+#devtools::install_github("dkahle/ggmap")
+
+```
+
+```{r Load Libraries include=FALSE}
+library(ggmap)
+library(readxl)
+library(stringdist)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+```
+
+```{r Register Google Geo API Key}
+
+# use Google API key to prevent query limitation
+register_google(key = "AIzaSyDoBApqKO2hXgSaHook7lAKNPc7AAYOAGU")
+
+```
+
+```{r Testing, eval=FALSE, include=FALSE}
+
+# check remaining queries available
+geocodeQueryCheck()
+
+# testing
+gc <- geocode("White House")
+gc <- as.numeric(gc)
+revgc <- revgeocode(gc)
+
+```
+
+```{r Select File}
+# Select the file from the file chooser
+fileToLoad <- file.choose(new = TRUE)
+```
+
+```{r Read CSV}
+# Read in the CSV data and store it in a variable 
+#origAddress <- read.csv(fileToLoad, skip = 2, header = TRUE, stringsAsFactors = FALSE)
+origAddress <- read_xlsx(fileToLoad, skip = 2)
+```
+
+```{r Select the Wanted Columns}
+
+keep_cols <- c('EMPLID', 'ADDRESS1', 'ADDRESS2', 'CITY', 'STATE', 'POSTAL')
+
+df <- origAddress %>% 
+  select(one_of(keep_cols)) %>%
+  mutate(addresses = paste(ADDRESS1, ADDRESS2, CITY, STATE, POSTAL, sep = ", "))
+
+```
+
+
+```{r Process the Change}
+# Loop through the addresses to get the latitude and longitude of each address and add it to the
+# origAddress data frame in new columns lat and lon
+for(i in 1:nrow(df)) {
+  # Print("Working...")
+  result <- as.numeric(geocode(df$addresses[i]))
+  df$geoAddress[i] <- as.character(revgeocode(result))
+}
+
+```
+
+```{r}
+
+# append a column to the data frame showing biggest differences between listed and computed addresses
+df$dist <- stringdist::stringdist(as.character(df$addresses), as.character(df$geoAddress))
+
+a <- df$addresses
+b <- df$geoAddress
+
+# create new columns and append to existing df
+df$osa <- stringdist(a, b, method="osa")
+df$lv <- stringdist(a, b, method="lv")
+df$dl <- stringdist(a, b, method="dl")
+df$ham <- stringdist(a, b, method="hamming")
+df$lcs <- stringdist(a, b, method="lcs")
+df$qgram <- stringdist(a, b, method="qgram")
+df$cos <- stringdist(a, b, method="cosine")
+df$jac <- stringdist(a, b, method="jaccard")
+df$jw <- stringdist(a, b, method="jw")
+df$sdx <- stringdist(a, b, method="soundex")
+
+# sort in descending order of difference
+df <- df %>% dplyr::arrange(desc(dist))
+
+```
+
+```{r Write CSV}
+
+# write a csv file to save the result to the desktop
+write.csv(
+  df,
+  file = file.choose(new = T),
+  append = FALSE,
+  quote = TRUE,
+  sep = " ",
+  eol = "\n", na = "NA", dec = ".", row.names = TRUE,
+  col.names = TRUE, qmethod = c("escape", "double"),
+  fileEncoding = "")
+
+```
+
+## View Histogram Showing Discrepancies (PeopleSoft Address vs. Google/USPS Address)
+
+```{r Visualize Results}
+suppressMessages(
+  ggplot(df, aes(x = dist)) +
+  geom_histogram(color = "Black", fill = "Light Blue") +
+  stat_bin(geom = "text", color = "Black", binwidth = NULL, bins = 30, aes(label = ..count..), position = position_stack(vjust = 0.7))
+)
+
+
+```
+
+##
+
+```{r Viz Results 2}
+
+plot_ly(x = df$dist, type = "box", jitter = 1) %>% 
+  layout(title = "Boxplot of Dist Score", xaxis = list(title = 'Dist Score'))
+
+# Outlier Data - defined as > the upper whisker computed through boxplot.stats
+Outlier_data = df[df$dist>boxplot(df$dist)$stats[5], ]  
+
+suppressMessages(
+Outlier_data %>%
+  dplyr::arrange(desc(dist))
+)
+
+```
+
+
+```{r}
+
+x <- df$dist
+
+# find the index of outliers from x (x is one column of a data frame)
+(a <- which(x %in% boxplot.stats(x)$out))
+
+y <- df$dist
+
+# find the index of outliers from y
+(b <- which(y %in% boxplot.stats(y)$out))
+
+# outliers in both x and y
+(outlier.list1 <- intersect(a,b))
+
+df <- data.frame(x, y)
+
+plot(df)
+points(df[outlier.list1,], col="red", pch="+", cex=2.5)
+
+```
+
+```{r}
+
+# outliers in either x or y
+(outlier.list2 <- union(a,b))
+
+plot(df)
+points(df[outlier.list2,], col="blue", pch="x", cex=2)
+
+```
+

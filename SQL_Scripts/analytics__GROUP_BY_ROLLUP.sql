@@ -13,14 +13,15 @@ SELECT
 	--,[Check Nbr]
 
 FROM
-[db].[schema].[table]
+	[IAACE1].[TRNPAY].[BASE_PAYCHECK_TAX_ALL_1]
 
-GROUP BY ROLLUP
-	(
-	DATEPART(YYYY, [Check Dt])
-	,DATEPART(MM, [Check Dt])   
-	,[Chk Option Descr] 
-	,[Off Cycle]
-	--,[Reprint]
-	--,[Pay Period End]
-	)
+GROUP BY 
+	ROLLUP
+		(
+			 DATEPART(YYYY, [Check Dt])
+			,DATEPART(MM, [Check Dt])   
+			,[Chk Option Descr] 
+			,[Off Cycle]
+			--,[Reprint]
+			--,[Pay Period End]
+		)

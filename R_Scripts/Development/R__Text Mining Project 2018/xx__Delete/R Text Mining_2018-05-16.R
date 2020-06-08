@@ -1,0 +1,373 @@
+#---
+#  title: "R Text Analysis"
+#  
+#  
+#  
+#---
+  
+
+#### Load required packages and set directory ####
+
+# load the packages all in one go
+  x <- c("RODBC", "data.table", "readtext", "tm", "wordcloud", "RWeka", "tidytext", "doParallel", "tau", "quanteda", "stringr", "ggplot2", "dplyr")
+  lapply(x, require, character.only = TRUE)
+
+  doParallel::registerDoParallel(cores = 4)   # loads doParallel package    
+
+# setup for working directory  
+  #setwd("S:/Projects/2018 R Text Mining/texts")
+  setwd(choose.dir()) 
+
+# Setup for database connection (use only if needed)
+  #server1 <-odbcDriverConnect('driver={SQL Server};server=CQW-DBS001236.stage.twi.com; database=IAACE1; uid=IAACE1User; pwd=9n5B1RIc')
+
+## Setup for special functions used in the analysis
+  # custom function to strip empty columns.  used in the sentiment analysis section below
+    has_data <- function(x) { sum(!is.na(x)) > 0 }
+
+#### Folder control and reading in data ####
+  
+  # set folder to read
+    folder_to_read <- getwd()
+
+  # check
+    folder_to_read
+
+  # list files with the folder that match a pattern
+    file_list <- list.files(
+      path = folder_to_read, # JKJ ~ need to fix so that we can let user specify file path
+      pattern = ".txt", # JKJ 2018/05/09 ~ need to make sure we can read Word and PDF too
+      all.files = FALSE, 
+      full.names = FALSE, 
+      recursive = TRUE, 
+      ignore.case = FALSE, 
+      include.dirs = TRUE, 
+      no.. = FALSE)
+
+#### tm package to read into a corpus ####
+
+a  <-Corpus(DirSource(getwd()), readerControl = list(language="eng")) 
+datacorpus <- a
+rm(a)
+
+#### old way to read in (no longer used) ####
+
+  # check that all files were read in
+  file_list   # Returns the files in the folder
+  
+  ## clean up from old method ##
+  
+    # reads in the files using the readtext package
+    datalist <- lapply(file_list, function(x) readtext(x))  # datalist is a list object
+    
+    # check
+    #str(datalist)  # datalist is a list of data frames
+    head(datalist)  # shows the documents as 1x2 data frames
+    
+    # combine all the datalist items into a single object
+    datafr = do.call("rbind", datalist) 
+    
+    rm(datalist)  # clean up
+    
+    # check
+    #View(datafr)
+    #str(datafr)
+    #datafr$text[7]
+    #write.table(datafr$text[7],"test.txt")
+
+    # test for replacing garbage strings / characters  
+    gsub("the", "", datafr$text)
+    gsub("â", "", datafr$text)
+    
+    # clear the console
+    cat("\014")
+    
+    # creates a data corpus from the text column of the datafr data frame
+    datacorpus=Corpus(VectorSource(datafr$text))    
+    
+    
+#### Cleaning the text and creating the corpus ####
+
+    # Checking the corpus
+
+      # check
+      for (i in 1:5) {
+        cat(paste("[[", i, "]] ", sep = ""))
+        writeLines(as.character(datacorpus[[i]]))
+      }
+
+#### Testing section - data frame ####
+
+  # make a data frame out of datafr for future use
+    df1 <- as.data.frame(datafr)
+
+    gsub("the", "", df1$text)
+    gsub("â", "", df1$text)
+
+#### Transformations on the corpus ####
+  
+## start of transformations (all done on datacorpus object)
+  jeopCorpus=NULL
+  
+  removeURL <- function(x) gsub("http[[:alnum:]]*", "", x)
+  
+  jeopCorpus <- tm_map(datacorpus, PlainTextDocument)
+  jeopCorpus <- tm_map(jeopCorpus, tolower)
+  jeopCorpus <- tm_map(jeopCorpus,removePunctuation)
+  #jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeMostPunctuation),preserve_intra_word_dashes = TRUE) 
+  jeopCorpus <- tm_map(jeopCorpus, removeNumbers)
+  jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeURL))
+  jeopCorpus <- tm_map(jeopCorpus, removeWords, stopwords('english'))
+  jeopCorpus <- tm_map(jeopCorpus, stripWhitespace)
+  #jeopCorpus <- tm_map(jeopCorpus, stemDocument,language="english")
+
+## TO DO ... need to remove user-specified words / phrases ... 
+  removeGarbage <- function(x) gsub("â", "", x)
+  jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeGarbage))
+  removeGarbage <- function(x) gsub("???", "", x)
+  jeopCorpus <- tm_map(jeopCorpus, content_transformer(removeGarbage))
+  
+  # check
+    for (i in 1:5) {
+      cat(paste("[[", i, "]] ", sep = ""))
+      writeLines(as.character(jeopCorpus[[i]]))
+    }    
+
+#### Document term matrix for analysis ####
+
+  # create a copy
+    jeopCorpus.copy=jeopCorpus
+  
+  # previous transformations turned the corpus of texts to character.  now we need to change back to a vector source    
+    jeopCorpus.copy <- Corpus(VectorSource(jeopCorpus.copy))
+  
+  # make the document term matrix using this object
+    doctmtrx <- DocumentTermMatrix(jeopCorpus.copy)
+  
+  # TO DO ... document what this does
+    alarm()
+  
+  # check
+    class(doctmtrx)
+  
+  # TO DO ... document what this does
+    dtm <- as.matrix(doctmtrx)
+  
+  # check
+    length(doctmtrx)
+    length(colSums(as.matrix(doctmtrx)))
+  
+  # clean up
+    rm(jeopCorpus.copy)
+    #rm(doctmtrx)
+
+#### Beginning of analysis section ####
+
+## PREP
+
+    # Term summary (done on dtm object)
+      word_data_1=as.data.frame(cbind.data.frame(Words = colnames(dtm), freq=colSums(dtm)))
+      #names(word_data_1)
+
+    # put in descending order
+      word_data_1 <- word_data_1[order(-word_data_1$freq),]
+
+    # check  
+      word_data_1
+
+    # Optional: write to .csv  
+      #write.csv(word_data_1,"Summary.csv",row.names=F)
+
+
+      
+      
+## WORDCLOUD
+
+  # Wordcloud (done on dtm object)
+    word_data_1 %>%
+    count(Words, sort = TRUE) %>%
+    with(wordcloud(words=colnames(dtm),freq=colSums(dtm), max.words = 50, min.freq=5, scale=c(3, .1), colors=brewer.pal(n=10, "Paired"), random.order=TRUE))
+
+### TERM SUMMARIES
+
+#### to do in this section
+  # 1. still need to list final step --- top n for EACH document
+    
+  # list most frequent terms (all documents)
+    top_n_terms <- word_data_1 %>%
+    select_if(has_data) %>% # strip empty columns
+    top_n(10)  
+
+    top_n_terms
+
+    # old way
+    #ggplot(top_n_terms, aes(x=Words, y=freq)) + geom_bar(stat = "identity") + xlab("Words") + ylab("Count") +coord_flip()
+  
+    # new way (descending order)
+    ggplot(top_n_terms, aes(x=reorder(Words,freq), y=freq)) + geom_bar(stat = "identity", fill="red") + xlab("Words") + ylab("Count") + coord_flip()
+    
+  # list most frequent terms (by document)
+    as.data.frame(findMostFreqTerms(doctmtrx, n=10))
+
+## BIGRAMS and TRIGRAMS
+
+#### to do in this section
+# 1. need a way to show the bigram output in a bar chart
+# 2. need a way to show the top 10 bigrams overall and the top ten bigrams per document
+
+  ### BIGRAMS
+  bigrams = textcnt(datafr$text, n = 2, method = "string")
+  bigrams = bigrams[order(bigrams, decreasing = TRUE)]
+
+  # need a way to show top 10 bigrams per document (similar to top 10 terms above)
+
+  # View bigrams
+  head(as.data.frame(bigrams), 20)
+
+  # Optional: Write list of bigrams to a file
+    #fwrite(as.data.frame(bigrams),row.names = T,file = "Bigrams.csv") #This is to write the Bigram Summmary into an excel file.
+
+  # plot bar chart of bigrams
+  library(data.table)
+  d1=setDT(as.data.frame(bigrams), keep.rownames = TRUE)[]
+  
+  ggplot(d1[1:10], aes(x=reorder(rn,bigrams), y=bigrams)) + geom_bar(stat = "identity") + xlab("Words") + ylab("Count") +coord_flip()
+  
+### TRIGRAMS
+  trigrams = textcnt(datafr$text, n = 3, method = "string")
+  trigrams = trigrams[order(trigrams, decreasing = TRUE)]
+
+  # View trigrams
+    head(as.data.frame(trigrams), 20)
+
+  # Optional: Write list of trigrams to a file
+    #fwrite(as.data.frame(trigrams),row.names = T,file = "Trigrams.csv") #This is to write the Trigram Summmary into an excel file.
+
+  # plot bar chart of trigrams
+    d2=setDT(as.data.frame(trigrams), keep.rownames = TRUE)[]
+    
+    ggplot(d2[1:10], aes(x=reorder(rn,trigrams), y=trigrams)) + geom_bar(stat = "identity") + xlab("Words") + ylab("Count") +coord_flip()    
+    
+#### Advanced Requirements ####
+
+# quanteda package (loaded during setup)
+
+# use the VCorpus object loaded via tm package
+  quantedaCorpus <- VCorpus(DirSource(getwd())) # choose.dir()
+  quantedaCorpus <- corpus(quantedaCorpus)
+  
+    #quantedaCorpus <- tm_map(quantedaCorpus, tolower)
+    #quantedaCorpus <- corpus(VectorSource(quantedaCorpus))
+  
+  # TO DO: figure out how to use the same corpus that we already cleaned / did the transformations to here
+  
+  # clean up
+
+  # check structure
+    summary(quantedaCorpus)
+
+### ADVANCED REQUIREMENT 1: Perform a search for a word across the corpuses, and view the contexts in which it occurs
+
+  # note: it is necessary to manually specify the words.
+    words <- c("China", "America")
+
+  # show the words in context      
+    kwic(quantedaCorpus, words)
+    
+  # TO DO: is there a way to visualize this?
+
+### ADVANCED REQUIREMENT 2: Sentiment Analysis
+
+  # we will use Tarun's method for sentiment analysis using the two approaches he outlines
+  # 1.	Using Bag of words - From a reference files of positive words and negative words , I have calculated Sentiement_BOW.
+  # 2.	Using Syuzhet Methodology - I have used this to present various emotions and rate each speech accordingly. Also, I have lastly categorized into Positive and Negative sentiments using "NRC" technique. 
+
+  # viz results
+  # we will visualize in two ways
+    # 1. the table similar to tarun's email file
+    # 2. heatmap
+
+####### Using Bag of Words and calculating the overall Sentiment of all the document ####################
+    pos = read.table("S:/Projects/2018 R Text Mining/Positive.txt", 
+                 sep="\n")
+    
+    #pos <- read.table(file.choose())
+    
+    #View(pos)
+
+    neg = read.table("S:/Projects/2018 R Text Mining/Negative.txt", 
+                 sep="\n")
+  
+    #neg <- read.table(file.choose())
+    
+    #View(neg)
+
+    pos.matches <- match(colnames(dtm),as.character(pos$V1))
+    neg.matches <- match(colnames(dtm),as.character(neg$V1))
+    pos.matches <- !is.na(pos.matches)
+    neg.matches <- !is.na(neg.matches)
+    pos.matrix <- doctmtrx[,pos.matches]
+    neg.matrix <- doctmtrx[,neg.matches]
+    
+    sentiment.score <- rowSums(as.matrix(pos.matrix)) - rowSums(as.matrix(neg.matrix))
+    sentiment.score
+    New_data=NULL
+    New_data=cbind.data.frame(Doc_name=datafr[,c(1)],Sentiment_BOW=sentiment.score)
+    
+    plot(x=row.names(New_data),y=New_data$Sentiment_BOW, type="b",xlab = "Document ID", ylab = "Sentiment")
+    
+    
+## josh sentiment
+    
+    # tidyr package loaded during setup
+    
+    datafr_sentiment <- datafr %>%    # JKJ 2018/05/08 - need to figure out how to use the CLEANED data source ()
+      unnest_tokens(word, text) %>%
+      inner_join(get_sentiments("bing"), by = "word") %>%
+      count(word, sentiment, sort=TRUE)
+    
+    # show results
+    datafr_sentiment
+    
+    # viz results
+    # TO DO
+    
+    
+    
+    
+    ############## Using Syuzhet methodology ##################
+    install.packages('syuzhet')
+    library(syuzhet)
+    syuzhet_vector=get_sentiment(datafr$text,method="syuzhet")
+    New_data=cbind(New_data, Sentiment_syuzhnet=syuzhet_vector)
+    View(New_data)
+    
+    s_v <- get_sentences(datafr$text)
+    s_v_sentiment <- get_sentiment(s_v)
+    
+    nrc_data <- get_nrc_sentiment(datafr$text)
+    View(nrc_data)
+    
+    New_data=cbind.data.frame(New_data,nrc_data)
+    View(New_data)
+    write.csv(New_data,file = "Sentiment_Analysis_Combined.csv")
+    
+# ADVANCED REQUIREMENT 3: Similarity among Documents
+
+    # tarun to add his code that compares all documents to all other documents
+    # we will visualize with a heatmap
+    
+    install.packages('RNewsflow')
+    install.packages('reshape2')
+    install.packages('corrgram')
+    
+    library(RNewsflow)
+    as.data.frame(documents.compare(doctmtrx))
+    #fwrite(as.data.frame(documents.compare(doctmtrx )),file = "Document_comparison.csv" )
+    
+    doc_comp=as.data.frame(documents.compare(doctmtrx ))
+    library(reshape2)
+    new_doc_comp=reshape2::acast(doc_comp, x  ~ y, value.var = "similarity")
+    library(corrgram)
+    corrgram(new_doc_comp)
+    
