@@ -1,0 +1,144 @@
+---
+title: "RE EDA Notebook"
+output: html_notebook
+---
+
+
+```{r}
+options(warn=-1)
+
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+packages <- c("dplyr", "rms", "tidyverse", "ggplot2", "forecast",
+     "tsoutliers", "sqldf", "gsubfn", "tcltk", "psych","glm2", "plotROC",
+     "boot", "ROCR", "stats", "pscl", "plotROC", "survey", "lubridate", "descr",
+     "corrplot", "RSQLite")
+
+ipak(packages)
+
+#install.packages("bigrquery")
+library("bigrquery")
+library("DataExplorer")
+library("skimr")
+library("dplyr")
+
+```
+
+```{r}
+con <- dbConnect(
+  bigrquery::bigquery(),
+  project = "analytics-met-thd",
+  dataset = "MET_BASE.MET_GS_ACTIVITY",
+  billing = "analytics-met-thd"
+  )
+```
+
+```{sql, connection=con, output.var = 'MET_BASE_GS_ACTIVITY'}
+
+SELECT * 
+FROM `analytics-met-thd.MET_BASE.MET_GS_ACTIVITY`  
+  WHERE str_nbr IN ('1905', '0625', '3903') 
+  AND svc_ts BETWEEN '2019-05-01' AND '2020-06-01'
+
+```
+
+```{sql, connection=con, max.print = 20, output.var = 'MET_STR_HIER', tab.cap = "Test Caption"}
+
+SELECT * 
+FROM `analytics-met-thd.MET_BASE.MV_MET_STR_HIER`  
+
+```
+
+**JKJ**
+
+```{sql, connection=con, output.var = 'SKU_INV_LOC' }
+
+select count(*) as sku_cnt, str_nbr, inv_loc_id  from  `analytics-met-thd.MET_BASE.SKU_INV_LOC`
+where str_nbr in ('1905', '0625', '3903') and eff_end_dt = '9999-12-31' and actv_flg = Y
+group by 2,3
+
+
+```
+
+```{r}
+skim(MET_BASE_GS_ACTIVITY)
+```
+
+```{r}
+skim(MET_STR_HIER)
+```
+
+```{r}
+skim(SKU_INV_LOC)
+```
+
+
+```{r}
+cal.mode <- function(cols, na.rm = FALSE) {
+  if (na.rm == TRUE) {
+    unique.value <- unique(cols[!is.na(cols)])
+    unique.value[which.max(tabulate(match(cols[!is.na(cols)], unique.value)))]
+  } else {
+    unique.value <- unique(cols)
+    unique.value[which.max(tabulate(match(cols, unique.value)))]
+  }
+}
+
+# CONTENTS + UNIVARIATE FOR NUMERICALS
+eda.num <- function(input.df) {
+  
+  eda.df <- input.df[, sapply(input.df, is.numeric)]
+  
+  tmp_num <- do.call(
+    rbind, lapply(eda.df, function(cols)
+      data.frame(
+        Type = class(cols)[1],
+        Mean = if (is.numeric(cols)) mean(cols, na.rm = TRUE) else NA,
+        Median = if (is.numeric(cols)) median(cols, na.rm = TRUE) else NA,
+        Mode = if (is.numeric(cols)) cal.mode(cols, na.rm = TRUE) else NA,
+        Std = if (is.numeric(cols)) sd(cols, na.rm = TRUE) else NA,
+        Variance = if (is.numeric(cols)) var(cols, na.rm = TRUE) else NA,
+        Range = if (is.numeric(cols)) range(cols, na.rm = TRUE)[2] - range(cols, na.rm = TRUE)[1] else NA,
+        IQR = if (is.numeric(cols)) IQR(cols, na.rm = TRUE) else NA,
+        
+        Qu_000pct_Min = if (is.numeric(cols)) min(cols, na.rm = TRUE) else NA,
+        Qu_001pct = if (is.numeric(cols)) quantile(cols, probs = .01, na.rm = TRUE) else NA,
+        Qu_005pct = if (is.numeric(cols)) quantile(cols, probs = .05, na.rm = TRUE) else NA,
+        Qu_010pct = if (is.numeric(cols)) quantile(cols, probs = .1, na.rm = TRUE) else NA,
+        Qu_025pct = if (is.numeric(cols)) quantile(cols, probs = .25, na.rm = TRUE) else NA,
+        Qu_050pct = if (is.numeric(cols)) quantile(cols, probs = .5, na.rm = TRUE) else NA,
+        Qu_075pct = if (is.numeric(cols)) quantile(cols, probs = .75, na.rm = TRUE) else NA,
+        Qu_090pct = if (is.numeric(cols)) quantile(cols, probs = .9, na.rm = TRUE) else NA,
+        Qu_095pct = if (is.numeric(cols)) quantile(cols, probs = .95, na.rm = TRUE) else NA,
+        Qu_099pct = if (is.numeric(cols)) quantile(cols, probs = .99, na.rm = TRUE) else NA,
+        Qu_100pct_Max = if (is.numeric(cols)) quantile(cols, probs = 1, na.rm = TRUE) else NA,
+        
+        Missing = sum(is.na(cols))
+      ))
+  )
+  
+  cbind(data.frame(colnames = rownames(tmp_num)), tmp_num)
+}
+
+
+```
+
+```{r}
+
+
+eda<-eda.num(MET_BASE_GS_ACTIVITY)
+eda
+```
+
+```{r}
+DataExplorer::plot_histogram(MET_BASE_GS_ACTIVITY)
+```
+
+
+
+
