@@ -1,4 +1,4 @@
-## Welcome to my GitHub page.
+## Welcome to my GitHub code repo.
 
 This website collects misc. code files I've come across over the years.  I maintain and preview the content for the website in Markdown files.
 
